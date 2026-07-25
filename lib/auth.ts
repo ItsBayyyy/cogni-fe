@@ -1,6 +1,6 @@
 "use client"
 
-const API_URL = "http://localhost:8000/api/v1/auth"
+const API_URL = "https://cogni-be-production.up.railway.app/api/v1/auth"
 
 export interface AuthUser {
   id: string
