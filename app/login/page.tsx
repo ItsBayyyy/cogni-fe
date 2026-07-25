@@ -3,32 +3,24 @@
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Eye, EyeOff, Mail, Lock, Sparkles, User } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, Mail, Lock, Sparkles, User, ShieldCheck } from "lucide-react"
 import { PhoneShell } from "@/components/phone-shell"
 import { VoiceOrb } from "@/components/voice-orb"
 import { useAuth } from "@/hooks/use-auth"
-import { signIn, signUp } from "@/lib/auth"
+import { signIn, signUp, verifyOtp, resendOtp } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { BrandLogo } from "@/components/brand-logo"
 
-type Mode = "signin" | "signup"
+type Mode = "signin" | "signup" | "verify"
 
 const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
-/**
- * Resolves the post-auth destination. When the caller is heading to the
- * default landing (`/setup`) and this user has never seen the tour, append
- * `?onboarding=1` so the OnboardingProvider opens it automatically.
- */
 function resolvePostAuthHref(next: string, userId: string): string {
-  // Respect explicit deep links — never override `next=/session/...` etc.
   if (next !== "/setup") return next
   try {
     const seen = window.localStorage.getItem(`${ONBOARDING_STORAGE_PREFIX}_${userId}`)
     if (seen) return "/setup"
-  } catch {
-    // localStorage unavailable — fall through and show the tour.
-  }
+  } catch {}
   return "/setup?onboarding=1"
 }
 
@@ -42,8 +34,11 @@ function LoginInner() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [otp, setOtp] = useState("")
+  
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [orbSize, setOrbSize] = useState(280)
   const [mounted, setMounted] = useState(false)
@@ -58,14 +53,13 @@ function LoginInner() {
       const w = window.innerWidth
       if (w >= 1280) setOrbSize(440)
       else if (w >= 1024) setOrbSize(380)
-      else setOrbSize(320) // desktop only — mobile uses a small inline badge
+      else setOrbSize(320)
     }
     update()
     window.addEventListener("resize", update)
     return () => window.removeEventListener("resize", update)
   }, [mounted])
 
-  // Jika sudah login, arahkan pengguna ke halaman selanjutnya.
   useEffect(() => {
     if (!loading && user) router.replace(resolvePostAuthHref(next, user.id))
   }, [user, loading, next, router])
@@ -73,17 +67,52 @@ function LoginInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccessMsg(null)
     setSubmitting(true)
-    const result =
-      mode === "signin"
-        ? await signIn(email.trim(), password)
-        : await signUp(name.trim(), email.trim(), password)
-    setSubmitting(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
+    
+    if (mode === "signin") {
+        const result = await signIn(email.trim(), password)
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            // If the error contains "verify", maybe switch to verify mode automatically?
+            if (result.error.toLowerCase().includes("verify")) {
+                // Optionally switch to verify mode here, but let's just let them see the error first.
+                // Or we could trigger resendOtp silently, but better not to.
+            }
+            return
+        }
+        router.replace(resolvePostAuthHref(next, result.user.id))
+    } else if (mode === "signup") {
+        const result = await signUp(name.trim(), email.trim(), password)
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            return
+        }
+        // Switch to OTP verify mode
+        setMode("verify")
+        setSuccessMsg("We sent a 6-digit code to your email.")
+    } else if (mode === "verify") {
+        const result = await verifyOtp(email.trim(), otp.trim())
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            return
+        }
+        router.replace(resolvePostAuthHref(next, result.user.id))
     }
-    router.replace(resolvePostAuthHref(next, result.user.id))
+  }
+
+  const handleResendOtp = async () => {
+      setError(null)
+      setSuccessMsg(null)
+      const res = await resendOtp(email.trim())
+      if (res.ok) {
+          setSuccessMsg("New code sent to your email.")
+      } else {
+          setError(res.error)
+      }
   }
 
   const handleDemoFill = () => {
@@ -94,7 +123,6 @@ function LoginInner() {
 
   return (
     <PhoneShell size="wide">
-      {/* Minimal top bar — back to landing */}
       <header className="px-4 sm:px-8 pt-5 sm:pt-6 pb-2">
         <Link href="/" className="inline-flex items-center gap-2 group">
         <BrandLogo size={32} priority />
@@ -104,7 +132,6 @@ function LoginInner() {
 
       <main className="px-4 sm:px-8 pb-12 pt-4 lg:pt-0 lg:flex lg:items-center lg:min-h-[calc(100dvh-100px)]">
         <div className="grid lg:grid-cols-[1fr_1.05fr] gap-10 lg:gap-16 items-center w-full">
-          {/* Left: orb + welcome copy (decorative on mobile, primary on desktop) */}
           <div className="hidden lg:flex flex-col items-center lg:items-start gap-8 order-2 lg:order-1">
             <div className="relative">
               <VoiceOrb state="idle" size={orbSize} />
@@ -122,69 +149,73 @@ function LoginInner() {
             </div>
           </div>
 
-          {/* Right: auth card */}
           <div className="order-1 lg:order-2 max-w-md w-full mx-auto">
-            {/* Mobile-only hero — small inline orb badge keeps the auth form above the fold */}
             <div className="lg:hidden text-center space-y-3 mb-6">
               <div className="grid place-items-center mx-auto mb-1">
                 <VoiceOrb state="idle" size={92} />
               </div>
               <h1 className="text-[26px] sm:text-[30px] font-semibold tracking-tight text-balance">
-                {mode === "signin" ? "Welcome back" : "Create your account"}
+                {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Check your email"}
               </h1>
               <p className="text-[14px] text-muted-foreground leading-relaxed text-pretty max-w-sm mx-auto">
                 {mode === "signin"
                   ? "Sign in to start a new session or revisit a report."
-                  : "It only takes a moment. No credit card, no setup."}
+                  : mode === "signup"
+                  ? "It only takes a moment. No credit card, no setup."
+                  : "We've sent a 6-digit verification code to your email."}
               </p>
             </div>
 
             <div className="rounded-3xl bg-card/85 backdrop-blur-xl border border-white/60 shadow-[0_20px_60px_-24px_oklch(0.5_0.05_330/0.45)] p-5 sm:p-7">
-              {/* Mode toggle */}
-              <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-foreground/5 mb-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signin")
-                    setError(null)
-                  }}
-                  className={cn(
-                    "h-10 rounded-full text-[13.5px] font-medium tracking-tight transition",
-                    mode === "signin"
-                      ? "bg-background text-foreground shadow-[0_4px_12px_-6px_oklch(0.2_0.02_60/0.25)]"
-                      : "text-muted-foreground hover:text-foreground/80",
-                  )}
-                  aria-pressed={mode === "signin"}
-                >
-                  Sign in
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode("signup")
-                    setError(null)
-                  }}
-                  className={cn(
-                    "h-10 rounded-full text-[13.5px] font-medium tracking-tight transition",
-                    mode === "signup"
-                      ? "bg-background text-foreground shadow-[0_4px_12px_-6px_oklch(0.2_0.02_60/0.25)]"
-                      : "text-muted-foreground hover:text-foreground/80",
-                  )}
-                  aria-pressed={mode === "signup"}
-                >
-                  Create account
-                </button>
-              </div>
+              {mode !== "verify" && (
+                  <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-foreground/5 mb-6">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signin")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className={cn(
+                        "h-10 rounded-full text-[13.5px] font-medium tracking-tight transition",
+                        mode === "signin"
+                          ? "bg-background text-foreground shadow-[0_4px_12px_-6px_oklch(0.2_0.02_60/0.25)]"
+                          : "text-muted-foreground hover:text-foreground/80",
+                      )}
+                      aria-pressed={mode === "signin"}
+                    >
+                      Sign in
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signup")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className={cn(
+                        "h-10 rounded-full text-[13.5px] font-medium tracking-tight transition",
+                        mode === "signup"
+                          ? "bg-background text-foreground shadow-[0_4px_12px_-6px_oklch(0.2_0.02_60/0.25)]"
+                          : "text-muted-foreground hover:text-foreground/80",
+                      )}
+                      aria-pressed={mode === "signup"}
+                    >
+                      Create account
+                    </button>
+                  </div>
+              )}
 
-              {/* Desktop heading */}
               <div className="hidden lg:block mb-5 space-y-1">
                 <h1 className="text-[24px] font-semibold tracking-tight">
-                  {mode === "signin" ? "Sign in" : "Create your account"}
+                  {mode === "signin" ? "Sign in" : mode === "signup" ? "Create your account" : "Check your email"}
                 </h1>
                 <p className="text-[13.5px] text-muted-foreground leading-relaxed">
                   {mode === "signin"
                     ? "Use your email and password to continue."
-                    : "Just a name, an email, and a password."}
+                    : mode === "signup"
+                    ? "Just a name, an email, and a password."
+                    : "Enter the 6-digit code we sent you."}
                 </p>
               </div>
 
@@ -208,50 +239,74 @@ function LoginInner() {
                   </Field>
                 )}
 
-                <Field id="email" label="Email" icon={<Mail className="size-[16px]" />}>
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@domain.com"
-                    autoComplete="email"
-                    required
-                    className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
-                  />
-                </Field>
+                {mode !== "verify" && (
+                    <Field id="email" label="Email" icon={<Mail className="size-[16px]" />}>
+                      <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="you@domain.com"
+                        autoComplete="email"
+                        required
+                        className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
+                      />
+                    </Field>
+                )}
 
-                <Field
-                  id="password"
-                  label="Password"
-                  icon={<Lock className="size-[16px]" />}
-                  rightSlot={
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
-                      className="text-muted-foreground hover:text-foreground/80 transition p-1 -mr-1"
+                {mode !== "verify" && (
+                    <Field
+                      id="password"
+                      label="Password"
+                      icon={<Lock className="size-[16px]" />}
+                      rightSlot={
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="text-muted-foreground hover:text-foreground/80 transition p-1 -mr-1"
+                        >
+                          {showPassword ? (
+                            <EyeOff className="size-[16px]" />
+                          ) : (
+                            <Eye className="size-[16px]" />
+                          )}
+                        </button>
+                      }
                     >
-                      {showPassword ? (
-                        <EyeOff className="size-[16px]" />
-                      ) : (
-                        <Eye className="size-[16px]" />
-                      )}
-                    </button>
-                  }
-                >
-                  <input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === "signup" ? "At least 4 characters" : "••••••••"}
-                    autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                    required
-                    minLength={4}
-                    className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
-                  />
-                </Field>
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder={mode === "signup" ? "At least 8 chars, 1 uppercase, 1 digit" : "••••••••"}
+                        autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                        required
+                        minLength={4}
+                        className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
+                      />
+                    </Field>
+                )}
+
+                {mode === "verify" && (
+                    <Field
+                      id="otp"
+                      label="6-Digit Code"
+                      icon={<ShieldCheck className="size-[16px]" />}
+                    >
+                      <input
+                        id="otp"
+                        type="text"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="123456"
+                        required
+                        minLength={6}
+                        maxLength={6}
+                        className="w-full bg-transparent outline-none text-[18px] tracking-[0.2em] font-medium placeholder:text-muted-foreground/60"
+                      />
+                    </Field>
+                )}
 
                 {error && (
                   <p
@@ -259,6 +314,15 @@ function LoginInner() {
                     className="text-[13px] text-[oklch(0.55_0.18_25)] tracking-tight px-1"
                   >
                     {error}
+                  </p>
+                )}
+                
+                {successMsg && (
+                  <p
+                    role="alert"
+                    className="text-[13px] text-green-500 tracking-tight px-1"
+                  >
+                    {successMsg}
                   </p>
                 )}
 
@@ -280,17 +344,16 @@ function LoginInner() {
                           className="size-4 rounded-full border-2 border-background/30 border-t-background animate-spin"
                           aria-hidden
                         />
-                        {mode === "signin" ? "Signing in…" : "Creating account…"}
+                        {mode === "signin" ? "Signing in…" : mode === "signup" ? "Creating account…" : "Verifying…"}
                       </span>
                     ) : (
                       <>
-                        {mode === "signin" ? "Sign in" : "Create account"}
+                        {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Verify Code"}
                         <ArrowRight className="size-4" />
                       </>
                     )}
                   </button>
 
-                  {/* Tombol Isi Akun Demo */}
                   {mode === "signin" && (
                     <button
                       type="button"
@@ -304,40 +367,74 @@ function LoginInner() {
                       Isi dengan Akun Demo
                     </button>
                   )}
+                  
+                  {mode === "verify" && (
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        className={cn(
+                          "w-full h-11 sm:h-12 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
+                          "border border-foreground/10 text-foreground hover:bg-foreground/5 active:scale-[0.99]",
+                        )}
+                      >
+                        Resend Code
+                      </button>
+                  )}
                 </div>
               </form>
 
-              <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
-                {mode === "signin" ? (
-                  <>
-                    {"Don't have an account? "}
+              {mode !== "verify" && (
+                  <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
+                    {mode === "signin" ? (
+                      <>
+                        {"Don't have an account? "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("signup")
+                            setError(null)
+                            setSuccessMsg(null)
+                          }}
+                          className="text-foreground font-medium hover:underline underline-offset-4"
+                        >
+                          Create one
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {"Already have one? "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMode("signin")
+                            setError(null)
+                            setSuccessMsg(null)
+                          }}
+                          className="text-foreground font-medium hover:underline underline-offset-4"
+                        >
+                          Sign in
+                        </button>
+                      </>
+                    )}
+                  </p>
+              )}
+              
+              {mode === "verify" && (
+                  <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
+                    {"Wrong email? "}
                     <button
                       type="button"
                       onClick={() => {
                         setMode("signup")
                         setError(null)
+                        setSuccessMsg(null)
                       }}
                       className="text-foreground font-medium hover:underline underline-offset-4"
                     >
-                      Create one
+                      Back to sign up
                     </button>
-                  </>
-                ) : (
-                  <>
-                    {"Already have one? "}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode("signin")
-                        setError(null)
-                      }}
-                      className="text-foreground font-medium hover:underline underline-offset-4"
-                    >
-                      Sign in
-                    </button>
-                  </>
-                )}
-              </p>
+                  </p>
+              )}
             </div>
 
             <p className="mt-5 text-center text-[11.5px] text-muted-foreground tracking-wide px-4">

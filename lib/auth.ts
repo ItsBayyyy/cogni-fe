@@ -69,7 +69,7 @@ export async function signUp(
   name: string,
   email: string,
   password: string,
-): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!name.trim()) return { ok: false, error: "Please enter your name." }
   if (!isValidEmail(email)) return { ok: false, error: "Please enter a valid email." }
   if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." }
@@ -87,10 +87,50 @@ export async function signUp(
         return { ok: false, error: data.detail || "Sign up failed" }
     }
     
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: "Network error" }
+  }
+}
+
+export async function verifyOtp(
+  email: string,
+  otpCode: string,
+): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API_URL}/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+        return { ok: false, error: data.detail || "Verification failed" }
+    }
+    
     localStorage.setItem("cogniflip_token", data.access_token)
     localStorage.setItem("cogniflip_user", JSON.stringify(data.user))
     notifyAuthChange()
     return { ok: true, user: data.user }
+  } catch (err) {
+    return { ok: false, error: "Network error" }
+  }
+}
+
+export async function resendOtp(
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API_URL}/resend-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+        return { ok: false, error: data.detail || "Failed to resend OTP" }
+    }
+    return { ok: true }
   } catch (err) {
     return { ok: false, error: "Network error" }
   }
