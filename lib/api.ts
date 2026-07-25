@@ -8,7 +8,7 @@ import { getAccessToken } from "@/lib/auth"
  * defaulting to http://localhost:8000/api/v1 for local dev.
  */
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://cogni-be-production.up.railway.app/api/v1"
 
 // ---------- Types ----------
 
