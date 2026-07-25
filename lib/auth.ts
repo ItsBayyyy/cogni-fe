@@ -1,6 +1,8 @@
 "use client"
 
-const API_URL = "https://cogni-be-production.up.railway.app/api/v1/auth"
+const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL 
+  ? `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth`
+  : "https://cogni-be-production.up.railway.app/api/v1/auth"
 
 export interface AuthUser {
   id: string
@@ -70,7 +72,9 @@ export async function signUp(
 ): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> {
   if (!name.trim()) return { ok: false, error: "Please enter your name." }
   if (!isValidEmail(email)) return { ok: false, error: "Please enter a valid email." }
-  if (password.length < 6) return { ok: false, error: "Password must be at least 6 characters." }
+  if (password.length < 8) return { ok: false, error: "Password must be at least 8 characters." }
+  if (!/[A-Z]/.test(password)) return { ok: false, error: "Password must contain at least one uppercase letter." }
+  if (!/\d/.test(password)) return { ok: false, error: "Password must contain at least one digit." }
 
   try {
     const res = await fetch(`${API_URL}/register`, {
