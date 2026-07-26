@@ -40,8 +40,18 @@ function LoginInner() {
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [cooldown, setCooldown] = useState(0)
   const [orbSize, setOrbSize] = useState(280)
   const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = setInterval(() => {
+      setCooldown((prev) => Math.max(0, prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [cooldown])
 
   useEffect(() => {
     setMounted(true)
@@ -92,6 +102,7 @@ function LoginInner() {
         }
         // Switch to OTP verify mode
         setMode("verify")
+        setCooldown(60)
         setSuccessMsg("We sent a 6-digit code to your email.")
     } else if (mode === "verify") {
         const result = await verifyOtp(email.trim(), otp.trim())
@@ -104,19 +115,23 @@ function LoginInner() {
     }
   }
 
-  const [resending, setResending] = useState(false)
-
   const handleResendOtp = async () => {
-      if (resending || submitting) return
+      if (resending || submitting || cooldown > 0) return
       setError(null)
       setSuccessMsg(null)
       setResending(true)
       const res = await resendOtp(email.trim())
       setResending(false)
       if (res.ok) {
+          setCooldown(60)
           setSuccessMsg("New code sent to your email.")
       } else {
           setError(res.error)
+          // Synchronize cooldown timer if backend returned remaining seconds (e.g., "wait 45 seconds")
+          const match = res.error.match(/wait (\d+) seconds/i)
+          if (match && match[1]) {
+              setCooldown(parseInt(match[1], 10))
+          }
       }
   }
 
@@ -376,12 +391,12 @@ function LoginInner() {
                   {mode === "verify" && (
                       <button
                         type="button"
-                        disabled={resending || submitting}
+                        disabled={resending || submitting || cooldown > 0}
                         onClick={handleResendOtp}
                         className={cn(
                           "w-full h-11 sm:h-12 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
                           "border border-foreground/10 text-foreground hover:bg-foreground/5 active:scale-[0.99]",
-                          (resending || submitting) && "opacity-50 cursor-not-allowed",
+                          (resending || submitting || cooldown > 0) && "opacity-50 cursor-not-allowed",
                         )}
                       >
                         {resending ? (
@@ -392,6 +407,8 @@ function LoginInner() {
                             />
                             Resending code…
                           </span>
+                        ) : cooldown > 0 ? (
+                          `Resend Code in ${cooldown}s`
                         ) : (
                           "Resend Code"
                         )}
