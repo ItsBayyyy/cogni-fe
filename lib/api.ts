@@ -105,8 +105,15 @@ async function request<T>(
     let msg = `${res.status} ${res.statusText}`
     try {
       const data = await res.json()
-      if (data?.detail) msg = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)
-      else if (data?.message) msg = data.message
+      if (data?.detail) {
+        if (typeof data.detail === "string") {
+          msg = data.detail
+        } else if (Array.isArray(data.detail)) {
+          msg = data.detail.map((d: Record<string, unknown>) => (d.msg || d.message || "") as string).filter(Boolean).join("; ") || "Validation error"
+        } else {
+          msg = "Request failed"
+        }
+      } else if (data?.message) msg = data.message
     } catch {
       /* ignore */
     }
@@ -170,7 +177,7 @@ export async function streamMessage(
   )
 
   if (!res.ok || !res.body) {
-    throw new ApiError(`Stream failed: ${res.status} ${res.statusText}`, res.status)
+    throw new ApiError("Stream connection failed. Please try again.", res.status)
   }
 
   const reader = res.body.getReader()
