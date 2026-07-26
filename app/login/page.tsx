@@ -15,6 +15,16 @@ type Mode = "signin" | "signup" | "verify"
 
 const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
+const PENDING_OTP_EMAIL_KEY = "cogniflip_pending_otp_email"
+const PENDING_OTP_TIME_KEY = "cogniflip_pending_otp_time"
+
+function clearPendingVerify() {
+  try {
+    window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY)
+    window.sessionStorage.removeItem(PENDING_OTP_TIME_KEY)
+  } catch {}
+}
+
 function resolvePostAuthHref(next: string, userId: string): string {
   if (next !== "/setup") return next
   try {
@@ -55,6 +65,20 @@ function LoginInner() {
 
   useEffect(() => {
     setMounted(true)
+    try {
+      const savedEmail = window.sessionStorage.getItem(PENDING_OTP_EMAIL_KEY)
+      const savedTimeStr = window.sessionStorage.getItem(PENDING_OTP_TIME_KEY)
+      if (savedEmail) {
+        setEmail(savedEmail)
+        setMode("verify")
+        if (savedTimeStr) {
+          const elapsed = Math.floor((Date.now() - parseInt(savedTimeStr, 10)) / 1000)
+          if (elapsed < 60) {
+            setCooldown(60 - elapsed)
+          }
+        }
+      }
+    } catch {}
   }, [])
 
   useEffect(() => {
@@ -103,6 +127,10 @@ function LoginInner() {
         // Switch to OTP verify mode
         setMode("verify")
         setCooldown(60)
+        try {
+          window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, email.trim())
+          window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
+        } catch {}
         setSuccessMsg("We sent a 6-digit code to your email.")
     } else if (mode === "verify") {
         const result = await verifyOtp(email.trim(), otp.trim())
@@ -111,6 +139,7 @@ function LoginInner() {
             setError(result.error)
             return
         }
+        clearPendingVerify()
         router.replace(resolvePostAuthHref(next, result.user.id))
     }
   }
@@ -124,6 +153,9 @@ function LoginInner() {
       setResending(false)
       if (res.ok) {
           setCooldown(60)
+          try {
+            window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
+          } catch {}
           setSuccessMsg("New code sent to your email.")
       } else {
           setError(res.error)
@@ -459,6 +491,7 @@ function LoginInner() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearPendingVerify()
                         setMode("signup")
                         setError(null)
                         setSuccessMsg(null)
