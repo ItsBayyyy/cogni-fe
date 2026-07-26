@@ -169,7 +169,7 @@ function LoginInner() {
 
   const handleDemoFill = () => {
     setEmail("bayuardana213@gmail.com")
-    setPassword("bayuardana213@gmail.com")
+    setPassword("Bayuardana213@gmail.com")
     setError(null)
   }
 
