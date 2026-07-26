@@ -38,6 +38,20 @@ export async function getAccessToken(): Promise<string | null> {
   return localStorage.getItem("cogniflip_token")
 }
 
+function extractError(res: Response, data: any, fallback: string): string {
+  if (res.status === 429) {
+    return data?.detail || data?.error || "Too many attempts. Please wait a minute before trying again."
+  }
+  if (data?.detail) {
+    if (typeof data.detail === "string") return data.detail
+    if (Array.isArray(data.detail)) {
+      return data.detail.map((d: any) => d.msg || d.message || "").filter(Boolean).join("; ") || fallback
+    }
+  }
+  if (data?.error && typeof data.error === "string") return data.error
+  return fallback
+}
+
 export async function signIn(
   email: string,
   password: string,
@@ -53,7 +67,7 @@ export async function signIn(
     })
     const data = await res.json()
     if (!res.ok) {
-        return { ok: false, error: data.detail || "Sign in failed" }
+        return { ok: false, error: extractError(res, data, "Sign in failed") }
     }
     
     localStorage.setItem("cogniflip_token", data.access_token)
@@ -84,7 +98,7 @@ export async function signUp(
     })
     const data = await res.json()
     if (!res.ok) {
-        return { ok: false, error: data.detail || "Sign up failed" }
+        return { ok: false, error: extractError(res, data, "Sign up failed") }
     }
     
     return { ok: true }
@@ -105,7 +119,7 @@ export async function verifyOtp(
     })
     const data = await res.json()
     if (!res.ok) {
-        return { ok: false, error: data.detail || "Verification failed" }
+        return { ok: false, error: extractError(res, data, "Verification failed") }
     }
     
     localStorage.setItem("cogniflip_token", data.access_token)
@@ -128,7 +142,7 @@ export async function resendOtp(
     })
     const data = await res.json()
     if (!res.ok) {
-        return { ok: false, error: data.detail || "Failed to resend OTP" }
+        return { ok: false, error: extractError(res, data, "Failed to resend OTP") }
     }
     return { ok: true }
   } catch (err) {
