@@ -170,6 +170,26 @@ export async function requestPasswordReset(
   }
 }
 
+export async function verifyResetPasswordCode(
+  email: string,
+  otpCode: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API_URL}/verify-reset-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return { ok: false, error: extractError(res, data, "Invalid reset code") }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: "Network error" }
+  }
+}
+
 export async function confirmPasswordReset(
   email: string,
   otpCode: string,

@@ -7,11 +7,11 @@ import { ArrowRight, Eye, EyeOff, Mail, Lock, Sparkles, User, ShieldCheck } from
 import { PhoneShell } from "@/components/phone-shell"
 import { VoiceOrb } from "@/components/voice-orb"
 import { useAuth } from "@/hooks/use-auth"
-import { signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, confirmPasswordReset } from "@/lib/auth"
+import { signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, verifyResetPasswordCode, confirmPasswordReset } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { BrandLogo } from "@/components/brand-logo"
 
-type Mode = "signin" | "signup" | "verify" | "forgot" | "reset"
+type Mode = "signin" | "signup" | "verify" | "forgot" | "reset_otp" | "reset_password"
 
 const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
@@ -111,11 +111,6 @@ function LoginInner() {
         setSubmitting(false)
         if (!result.ok) {
             setError(result.error)
-            // If the error contains "verify", maybe switch to verify mode automatically?
-            if (result.error.toLowerCase().includes("verify")) {
-                // Optionally switch to verify mode here, but let's just let them see the error first.
-                // Or we could trigger resendOtp silently, but better not to.
-            }
             return
         }
         router.replace(resolvePostAuthHref(next, result.user.id))
@@ -150,10 +145,19 @@ function LoginInner() {
             setError(result.error)
             return
         }
-        setMode("reset")
+        setMode("reset_otp")
         setCooldown(60)
         setSuccessMsg("We sent a 6-digit reset code to your email.")
-    } else if (mode === "reset") {
+    } else if (mode === "reset_otp") {
+        const result = await verifyResetPasswordCode(email.trim(), otp.trim())
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            return
+        }
+        setMode("reset_password")
+        setSuccessMsg("Reset code verified! Please enter your new password.")
+    } else if (mode === "reset_password") {
         if (newPassword !== confirmPassword) {
             setSubmitting(false)
             setError("Passwords do not match.")
@@ -179,14 +183,14 @@ function LoginInner() {
       setError(null)
       setSuccessMsg(null)
       setResending(true)
-      const res = await resendOtp(email.trim())
+      const res = mode === "reset_otp" ? await requestPasswordReset(email.trim()) : await resendOtp(email.trim())
       setResending(false)
       if (res.ok) {
           setCooldown(60)
           try {
             window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
           } catch {}
-          setSuccessMsg("New code sent to your email.")
+          setSuccessMsg(mode === "reset_otp" ? "New reset code sent to your email." : "New code sent to your email.")
       } else {
           setError(res.error)
           // Synchronize cooldown timer if backend returned remaining seconds (e.g., "wait 45 seconds")
@@ -237,7 +241,15 @@ function LoginInner() {
                 <VoiceOrb state="idle" size={92} />
               </div>
               <h1 className="text-[26px] sm:text-[30px] font-semibold tracking-tight text-balance">
-                {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : mode === "verify" ? "Check your email" : mode === "forgot" ? "Reset your password" : "Set new password"}
+                {mode === "signin"
+                  ? "Welcome back"
+                  : mode === "signup"
+                  ? "Create your account"
+                  : mode === "verify" || mode === "reset_otp"
+                  ? "Check your email"
+                  : mode === "forgot"
+                  ? "Reset your password"
+                  : "Set new password"}
               </h1>
               <p className="text-[14px] text-muted-foreground leading-relaxed text-pretty max-w-sm mx-auto">
                 {mode === "signin"
@@ -248,7 +260,9 @@ function LoginInner() {
                   ? "We've sent a 6-digit verification code to your email."
                   : mode === "forgot"
                   ? "Enter your email address and we'll send you a 6-digit reset code."
-                  : "Enter the code sent to your email and your new password."}
+                  : mode === "reset_otp"
+                  ? "We've sent a 6-digit password reset code to your email."
+                  : "Enter your strong new password below."}
               </p>
             </div>
 
@@ -294,7 +308,15 @@ function LoginInner() {
 
               <div className="hidden lg:block mb-5 space-y-1">
                 <h1 className="text-[24px] font-semibold tracking-tight">
-                  {mode === "signin" ? "Sign in" : mode === "signup" ? "Create your account" : mode === "verify" ? "Check your email" : mode === "forgot" ? "Reset your password" : "Set new password"}
+                  {mode === "signin"
+                    ? "Sign in"
+                    : mode === "signup"
+                    ? "Create your account"
+                    : mode === "verify" || mode === "reset_otp"
+                    ? "Check your email"
+                    : mode === "forgot"
+                    ? "Reset your password"
+                    : "Set new password"}
                 </h1>
                 <p className="text-[13.5px] text-muted-foreground leading-relaxed">
                   {mode === "signin"
@@ -305,7 +327,9 @@ function LoginInner() {
                     ? "Enter the 6-digit code we sent you."
                     : mode === "forgot"
                     ? "Enter your email to receive a password reset code."
-                    : "Enter the code and your new password below."}
+                    : mode === "reset_otp"
+                    ? "Enter the 6-digit reset code sent to your email."
+                    : "Enter and confirm your new password below."}
                 </p>
               </div>
 
@@ -395,7 +419,7 @@ function LoginInner() {
                     </div>
                 )}
 
-                {(mode === "verify" || mode === "reset") && (
+                {(mode === "verify" || mode === "reset_otp") && (
                     <Field
                       id="otp"
                       label="6-Digit Code"
@@ -415,7 +439,7 @@ function LoginInner() {
                     </Field>
                 )}
 
-                {mode === "reset" && (
+                {mode === "reset_password" && (
                     <>
                       <Field
                         id="newPassword"
@@ -497,6 +521,8 @@ function LoginInner() {
                           ? "Verifying…"
                           : mode === "forgot"
                           ? "Sending reset code…"
+                          : mode === "reset_otp"
+                          ? "Verifying reset code…"
                           : "Resetting password…"}
                       </span>
                     ) : (
@@ -509,6 +535,8 @@ function LoginInner() {
                           ? "Verify Code"
                           : mode === "forgot"
                           ? "Send Reset Code"
+                          : mode === "reset_otp"
+                          ? "Verify Reset Code"
                           : "Reset Password"}
                         <ArrowRight className="size-4" />
                       </>
@@ -529,7 +557,7 @@ function LoginInner() {
                     </button>
                   )}
                   
-                  {mode === "verify" && (
+                  {(mode === "verify" || mode === "reset_otp") && (
                       <button
                         type="button"
                         disabled={resending || submitting || cooldown > 0}
@@ -610,9 +638,9 @@ function LoginInner() {
                   </>
                 )}
 
-                {mode === "reset" && (
+                {mode === "reset_otp" && (
                   <>
-                    {"Need a new code? "}
+                    {"Wrong email? "}
                     <button
                       type="button"
                       onClick={() => {
@@ -622,7 +650,24 @@ function LoginInner() {
                       }}
                       className="text-foreground font-medium hover:underline underline-offset-4"
                     >
-                      Request reset code again
+                      Back to forgot password
+                    </button>
+                  </>
+                )}
+
+                {mode === "reset_password" && (
+                  <>
+                    {"Want to sign in instead? "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signin")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className="text-foreground font-medium hover:underline underline-offset-4"
+                    >
+                      Sign in
                     </button>
                   </>
                 )}
