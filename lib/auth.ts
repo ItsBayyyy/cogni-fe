@@ -150,6 +150,51 @@ export async function resendOtp(
   }
 }
 
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!isValidEmail(email)) return { ok: false, error: "Please enter a valid email." }
+  try {
+    const res = await fetch(`${API_URL}/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return { ok: false, error: extractError(res, data, "Failed to send reset code") }
+    }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: "Network error" }
+  }
+}
+
+export async function confirmPasswordReset(
+  email: string,
+  otpCode: string,
+  newPassword: string,
+): Promise<{ ok: true; detail: string } | { ok: false; error: string }> {
+  if (newPassword.length < 8) return { ok: false, error: "Password must be at least 8 characters." }
+  if (!/[A-Z]/.test(newPassword)) return { ok: false, error: "Password must contain at least one uppercase letter." }
+  if (!/\d/.test(newPassword)) return { ok: false, error: "Password must contain at least one digit." }
+
+  try {
+    const res = await fetch(`${API_URL}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode, new_password: newPassword })
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return { ok: false, error: extractError(res, data, "Failed to reset password") }
+    }
+    return { ok: true, detail: data.detail || "Password reset successfully." }
+  } catch (err) {
+    return { ok: false, error: "Network error" }
+  }
+}
+
 export async function signOut() {
   if (typeof window !== "undefined") {
       localStorage.removeItem("cogniflip_token")

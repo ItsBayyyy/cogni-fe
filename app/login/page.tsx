@@ -7,11 +7,11 @@ import { ArrowRight, Eye, EyeOff, Mail, Lock, Sparkles, User, ShieldCheck } from
 import { PhoneShell } from "@/components/phone-shell"
 import { VoiceOrb } from "@/components/voice-orb"
 import { useAuth } from "@/hooks/use-auth"
-import { signIn, signUp, verifyOtp, resendOtp } from "@/lib/auth"
+import { signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, confirmPasswordReset } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { BrandLogo } from "@/components/brand-logo"
 
-type Mode = "signin" | "signup" | "verify"
+type Mode = "signin" | "signup" | "verify" | "forgot" | "reset"
 
 const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
@@ -44,6 +44,8 @@ function LoginInner() {
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [otp, setOtp] = useState("")
   
   const [showPassword, setShowPassword] = useState(false)
@@ -141,6 +143,34 @@ function LoginInner() {
         }
         clearPendingVerify()
         router.replace(resolvePostAuthHref(next, result.user.id))
+    } else if (mode === "forgot") {
+        const result = await requestPasswordReset(email.trim())
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            return
+        }
+        setMode("reset")
+        setCooldown(60)
+        setSuccessMsg("We sent a 6-digit reset code to your email.")
+    } else if (mode === "reset") {
+        if (newPassword !== confirmPassword) {
+            setSubmitting(false)
+            setError("Passwords do not match.")
+            return
+        }
+        const result = await confirmPasswordReset(email.trim(), otp.trim(), newPassword)
+        setSubmitting(false)
+        if (!result.ok) {
+            setError(result.error)
+            return
+        }
+        setMode("signin")
+        setPassword("")
+        setNewPassword("")
+        setConfirmPassword("")
+        setOtp("")
+        setSuccessMsg(result.detail || "Password reset successfully. Please sign in.")
     }
   }
 
@@ -207,19 +237,23 @@ function LoginInner() {
                 <VoiceOrb state="idle" size={92} />
               </div>
               <h1 className="text-[26px] sm:text-[30px] font-semibold tracking-tight text-balance">
-                {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : "Check your email"}
+                {mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your account" : mode === "verify" ? "Check your email" : mode === "forgot" ? "Reset your password" : "Set new password"}
               </h1>
               <p className="text-[14px] text-muted-foreground leading-relaxed text-pretty max-w-sm mx-auto">
                 {mode === "signin"
                   ? "Sign in to start a new session or revisit a report."
                   : mode === "signup"
                   ? "It only takes a moment. No credit card, no setup."
-                  : "We've sent a 6-digit verification code to your email."}
+                  : mode === "verify"
+                  ? "We've sent a 6-digit verification code to your email."
+                  : mode === "forgot"
+                  ? "Enter your email address and we'll send you a 6-digit reset code."
+                  : "Enter the code sent to your email and your new password."}
               </p>
             </div>
 
             <div className="rounded-3xl bg-card/85 backdrop-blur-xl border border-white/60 shadow-[0_20px_60px_-24px_oklch(0.5_0.05_330/0.45)] p-5 sm:p-7">
-              {mode !== "verify" && (
+              {(mode === "signin" || mode === "signup") && (
                   <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-foreground/5 mb-6">
                     <button
                       type="button"
@@ -260,14 +294,18 @@ function LoginInner() {
 
               <div className="hidden lg:block mb-5 space-y-1">
                 <h1 className="text-[24px] font-semibold tracking-tight">
-                  {mode === "signin" ? "Sign in" : mode === "signup" ? "Create your account" : "Check your email"}
+                  {mode === "signin" ? "Sign in" : mode === "signup" ? "Create your account" : mode === "verify" ? "Check your email" : mode === "forgot" ? "Reset your password" : "Set new password"}
                 </h1>
                 <p className="text-[13.5px] text-muted-foreground leading-relaxed">
                   {mode === "signin"
                     ? "Use your email and password to continue."
                     : mode === "signup"
                     ? "Just a name, an email, and a password."
-                    : "Enter the 6-digit code we sent you."}
+                    : mode === "verify"
+                    ? "Enter the 6-digit code we sent you."
+                    : mode === "forgot"
+                    ? "Enter your email to receive a password reset code."
+                    : "Enter the code and your new password below."}
                 </p>
               </div>
 
@@ -291,7 +329,7 @@ function LoginInner() {
                   </Field>
                 )}
 
-                {mode !== "verify" && (
+                {(mode === "signin" || mode === "signup" || mode === "forgot") && (
                     <Field id="email" label="Email" icon={<Mail className="size-[16px]" />}>
                       <input
                         id="email"
@@ -306,41 +344,58 @@ function LoginInner() {
                     </Field>
                 )}
 
-                {mode !== "verify" && (
-                    <Field
-                      id="password"
-                      label="Password"
-                      icon={<Lock className="size-[16px]" />}
-                      rightSlot={
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          aria-label={showPassword ? "Hide password" : "Show password"}
-                          className="text-muted-foreground hover:text-foreground/80 transition p-1 -mr-1"
-                        >
-                          {showPassword ? (
-                            <EyeOff className="size-[16px]" />
-                          ) : (
-                            <Eye className="size-[16px]" />
-                          )}
-                        </button>
-                      }
-                    >
-                      <input
+                {(mode === "signin" || mode === "signup") && (
+                    <div>
+                      <Field
                         id="password"
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder={mode === "signup" ? "At least 8 chars, 1 uppercase, 1 digit" : "••••••••"}
-                        autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                        required
-                        minLength={4}
-                        className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
-                      />
-                    </Field>
+                        label="Password"
+                        icon={<Lock className="size-[16px]" />}
+                        rightSlot={
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            className="text-muted-foreground hover:text-foreground/80 transition p-1 -mr-1"
+                          >
+                            {showPassword ? (
+                              <EyeOff className="size-[16px]" />
+                            ) : (
+                              <Eye className="size-[16px]" />
+                            )}
+                          </button>
+                        }
+                      >
+                        <input
+                          id="password"
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder={mode === "signup" ? "At least 8 chars, 1 uppercase, 1 digit" : "••••••••"}
+                          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                          required
+                          minLength={4}
+                          className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
+                        />
+                      </Field>
+                      {mode === "signin" && (
+                        <div className="flex justify-end pt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMode("forgot")
+                              setError(null)
+                              setSuccessMsg(null)
+                            }}
+                            className="text-[12.5px] text-muted-foreground hover:text-foreground font-medium transition"
+                          >
+                            Forgot password?
+                          </button>
+                        </div>
+                      )}
+                    </div>
                 )}
 
-                {mode === "verify" && (
+                {(mode === "verify" || mode === "reset") && (
                     <Field
                       id="otp"
                       label="6-Digit Code"
@@ -358,6 +413,44 @@ function LoginInner() {
                         className="w-full bg-transparent outline-none text-[18px] tracking-[0.2em] font-medium placeholder:text-muted-foreground/60"
                       />
                     </Field>
+                )}
+
+                {mode === "reset" && (
+                    <>
+                      <Field
+                        id="newPassword"
+                        label="New Password"
+                        icon={<Lock className="size-[16px]" />}
+                      >
+                        <input
+                          id="newPassword"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="At least 8 chars, 1 uppercase, 1 digit"
+                          required
+                          minLength={8}
+                          className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
+                        />
+                      </Field>
+
+                      <Field
+                        id="confirmPassword"
+                        label="Confirm New Password"
+                        icon={<Lock className="size-[16px]" />}
+                      >
+                        <input
+                          id="confirmPassword"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Re-enter new password"
+                          required
+                          minLength={8}
+                          className="w-full bg-transparent outline-none text-[15px] tracking-tight placeholder:text-muted-foreground/60"
+                        />
+                      </Field>
+                    </>
                 )}
 
                 {error && (
@@ -396,11 +489,27 @@ function LoginInner() {
                           className="size-4 rounded-full border-2 border-background/30 border-t-background animate-spin"
                           aria-hidden
                         />
-                        {mode === "signin" ? "Signing in…" : mode === "signup" ? "Creating account…" : "Verifying…"}
+                        {mode === "signin"
+                          ? "Signing in…"
+                          : mode === "signup"
+                          ? "Creating account…"
+                          : mode === "verify"
+                          ? "Verifying…"
+                          : mode === "forgot"
+                          ? "Sending reset code…"
+                          : "Resetting password…"}
                       </span>
                     ) : (
                       <>
-                        {mode === "signin" ? "Sign in" : mode === "signup" ? "Create account" : "Verify Code"}
+                        {mode === "signin"
+                          ? "Sign in"
+                          : mode === "signup"
+                          ? "Create account"
+                          : mode === "verify"
+                          ? "Verify Code"
+                          : mode === "forgot"
+                          ? "Send Reset Code"
+                          : "Reset Password"}
                         <ArrowRight className="size-4" />
                       </>
                     )}
@@ -449,44 +558,77 @@ function LoginInner() {
                 </div>
               </form>
 
-              {mode !== "verify" && (
-                  <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
-                    {mode === "signin" ? (
-                      <>
-                        {"Don't have an account? "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMode("signup")
-                            setError(null)
-                            setSuccessMsg(null)
-                          }}
-                          className="text-foreground font-medium hover:underline underline-offset-4"
-                        >
-                          Create one
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        {"Already have one? "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMode("signin")
-                            setError(null)
-                            setSuccessMsg(null)
-                          }}
-                          className="text-foreground font-medium hover:underline underline-offset-4"
-                        >
-                          Sign in
-                        </button>
-                      </>
-                    )}
-                  </p>
-              )}
-              
-              {mode === "verify" && (
-                  <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
+              <p className="mt-5 text-center text-[12.5px] text-muted-foreground tracking-tight">
+                {mode === "signin" && (
+                  <>
+                    {"Don't have an account? "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signup")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className="text-foreground font-medium hover:underline underline-offset-4"
+                    >
+                      Create one
+                    </button>
+                  </>
+                )}
+
+                {mode === "signup" && (
+                  <>
+                    {"Already have one? "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signin")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className="text-foreground font-medium hover:underline underline-offset-4"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                )}
+
+                {mode === "forgot" && (
+                  <>
+                    {"Remembered your password? "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signin")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className="text-foreground font-medium hover:underline underline-offset-4"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                )}
+
+                {mode === "reset" && (
+                  <>
+                    {"Need a new code? "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("forgot")
+                        setError(null)
+                        setSuccessMsg(null)
+                      }}
+                      className="text-foreground font-medium hover:underline underline-offset-4"
+                    >
+                      Request reset code again
+                    </button>
+                  </>
+                )}
+
+                {mode === "verify" && (
+                  <>
                     {"Wrong email? "}
                     <button
                       type="button"
@@ -500,8 +642,9 @@ function LoginInner() {
                     >
                       Back to sign up
                     </button>
-                  </p>
-              )}
+                  </>
+                )}
+              </p>
             </div>
 
             <p className="mt-5 text-center text-[11.5px] text-muted-foreground tracking-wide px-4">
