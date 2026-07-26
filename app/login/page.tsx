@@ -104,10 +104,15 @@ function LoginInner() {
     }
   }
 
+  const [resending, setResending] = useState(false)
+
   const handleResendOtp = async () => {
+      if (resending || submitting) return
       setError(null)
       setSuccessMsg(null)
+      setResending(true)
       const res = await resendOtp(email.trim())
+      setResending(false)
       if (res.ok) {
           setSuccessMsg("New code sent to your email.")
       } else {
@@ -371,13 +376,25 @@ function LoginInner() {
                   {mode === "verify" && (
                       <button
                         type="button"
+                        disabled={resending || submitting}
                         onClick={handleResendOtp}
                         className={cn(
                           "w-full h-11 sm:h-12 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
                           "border border-foreground/10 text-foreground hover:bg-foreground/5 active:scale-[0.99]",
+                          (resending || submitting) && "opacity-50 cursor-not-allowed",
                         )}
                       >
-                        Resend Code
+                        {resending ? (
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="size-4 rounded-full border-2 border-foreground/30 border-t-foreground animate-spin"
+                              aria-hidden
+                            />
+                            Resending code…
+                          </span>
+                        ) : (
+                          "Resend Code"
+                        )}
                       </button>
                   )}
                 </div>
