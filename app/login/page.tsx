@@ -17,11 +17,21 @@ const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
 const PENDING_OTP_EMAIL_KEY = "cogniflip_pending_otp_email"
 const PENDING_OTP_TIME_KEY = "cogniflip_pending_otp_time"
+const PENDING_OTP_MODE_KEY = "cogniflip_pending_otp_mode"
 
 function clearPendingVerify() {
   try {
     window.sessionStorage.removeItem(PENDING_OTP_EMAIL_KEY)
     window.sessionStorage.removeItem(PENDING_OTP_TIME_KEY)
+    window.sessionStorage.removeItem(PENDING_OTP_MODE_KEY)
+  } catch {}
+}
+
+function savePendingVerify(email: string, mode: "verify" | "reset_otp") {
+  try {
+    window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, email)
+    window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
+    window.sessionStorage.setItem(PENDING_OTP_MODE_KEY, mode)
   } catch {}
 }
 
@@ -70,9 +80,10 @@ function LoginInner() {
     try {
       const savedEmail = window.sessionStorage.getItem(PENDING_OTP_EMAIL_KEY)
       const savedTimeStr = window.sessionStorage.getItem(PENDING_OTP_TIME_KEY)
-      if (savedEmail) {
+      const savedMode = window.sessionStorage.getItem(PENDING_OTP_MODE_KEY) as Mode | null
+      if (savedEmail && (savedMode === "verify" || savedMode === "reset_otp")) {
         setEmail(savedEmail)
-        setMode("verify")
+        setMode(savedMode)
         if (savedTimeStr) {
           const elapsed = Math.floor((Date.now() - parseInt(savedTimeStr, 10)) / 1000)
           if (elapsed < 60) {
@@ -124,10 +135,7 @@ function LoginInner() {
         // Switch to OTP verify mode
         setMode("verify")
         setCooldown(60)
-        try {
-          window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, email.trim())
-          window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
-        } catch {}
+        savePendingVerify(email.trim(), "verify")
         setSuccessMsg("We sent a 6-digit code to your email.")
     } else if (mode === "verify") {
         const result = await verifyOtp(email.trim(), otp.trim())
@@ -147,6 +155,7 @@ function LoginInner() {
         }
         setMode("reset_otp")
         setCooldown(60)
+        savePendingVerify(email.trim(), "reset_otp")
         setSuccessMsg("We sent a 6-digit reset code to your email.")
     } else if (mode === "reset_otp") {
         const result = await verifyResetPasswordCode(email.trim(), otp.trim())
@@ -644,6 +653,7 @@ function LoginInner() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearPendingVerify()
                         setMode("forgot")
                         setError(null)
                         setSuccessMsg(null)
