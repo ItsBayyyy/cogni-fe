@@ -27,7 +27,7 @@ function clearPendingVerify() {
   } catch {}
 }
 
-function savePendingVerify(email: string, mode: "verify" | "reset_otp") {
+function savePendingVerify(email: string, mode: "verify" | "reset_otp" | "reset_password") {
   try {
     window.sessionStorage.setItem(PENDING_OTP_EMAIL_KEY, email)
     window.sessionStorage.setItem(PENDING_OTP_TIME_KEY, Date.now().toString())
@@ -81,7 +81,7 @@ function LoginInner() {
       const savedEmail = window.sessionStorage.getItem(PENDING_OTP_EMAIL_KEY)
       const savedTimeStr = window.sessionStorage.getItem(PENDING_OTP_TIME_KEY)
       const savedMode = window.sessionStorage.getItem(PENDING_OTP_MODE_KEY) as Mode | null
-      if (savedEmail && (savedMode === "verify" || savedMode === "reset_otp")) {
+      if (savedEmail && (savedMode === "verify" || savedMode === "reset_otp" || savedMode === "reset_password")) {
         setEmail(savedEmail)
         setMode(savedMode)
         if (savedTimeStr) {
@@ -165,6 +165,7 @@ function LoginInner() {
             return
         }
         setMode("reset_password")
+        savePendingVerify(email.trim(), "reset_password")
         setSuccessMsg("Reset code verified! Please enter your new password.")
     } else if (mode === "reset_password") {
         if (newPassword !== confirmPassword) {
@@ -178,6 +179,7 @@ function LoginInner() {
             setError(result.error)
             return
         }
+        clearPendingVerify()
         setMode("signin")
         setPassword("")
         setNewPassword("")
@@ -671,6 +673,7 @@ function LoginInner() {
                     <button
                       type="button"
                       onClick={() => {
+                        clearPendingVerify()
                         setMode("signin")
                         setError(null)
                         setSuccessMsg(null)
