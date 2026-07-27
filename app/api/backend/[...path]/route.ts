@@ -53,8 +53,16 @@ async function relay(
   const sessionCookie = sessionCookieName()
 
   if (routePath === "auth/logout") {
-    cookieStore.delete(sessionCookie)
-    return new NextResponse(null, { status: 204 })
+    const response = new NextResponse(null, { status: 204 })
+    response.cookies.set(sessionCookie, "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 0,
+      expires: new Date(0),
+    })
+    return response
   }
 
   const target = new URL(`${backendBaseUrl()}/${routePath}`)

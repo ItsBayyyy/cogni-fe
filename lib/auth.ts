@@ -217,13 +217,20 @@ export async function confirmPasswordReset(
   }
 }
 
-export async function signOut() {
-  if (typeof window !== "undefined") {
-      await fetch(`${API_URL}/logout`, {
-        method: "POST",
-        credentials: "same-origin",
-      }).catch(() => undefined)
-      notifyAuthChange()
+export async function signOut(): Promise<boolean> {
+  if (typeof window === "undefined") return false
+
+  try {
+    const res = await fetch(`${API_URL}/logout`, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+    if (!res.ok) return false
+    notifyAuthChange()
+    return true
+  } catch {
+    return false
   }
 }
 

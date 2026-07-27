@@ -60,6 +60,8 @@ export function AppHeader({
   const [scrolled, setScrolled] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [signOutError, setSignOutError] = useState<string | null>(null)
   const userMenuRef = useRef<HTMLDivElement | null>(null)
 
   // On the landing page, swap the route-level nav for in-page anchor links
@@ -125,11 +127,22 @@ export function AppHeader({
         .toUpperCase()
     : ""
 
-  const handleSignOut = () => {
-    signOut()
+  const handleSignOut = async () => {
+    if (signingOut) return
+    setSigningOut(true)
+    setSignOutError(null)
+
+    const didSignOut = await signOut()
+    if (!didSignOut) {
+      setSigningOut(false)
+      setSignOutError("Could not sign out. Please try again.")
+      return
+    }
+
     setUserMenuOpen(false)
     setMenuOpen(false)
-    router.push("/")
+    router.replace("/")
+    router.refresh()
   }
 
   const BackButton = backHref ? (
@@ -223,12 +236,18 @@ export function AppHeader({
                       <button
                         type="button"
                         onClick={handleSignOut}
+                        disabled={signingOut}
                         role="menuitem"
-                        className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[13.5px] text-foreground/80 hover:bg-card transition text-left"
+                        className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-[13.5px] text-foreground/80 hover:bg-card transition text-left disabled:cursor-wait disabled:opacity-50"
                       >
                         <LogOut className="size-[15px]" />
-                        Sign out
+                        {signingOut ? "Signing out…" : "Sign out"}
                       </button>
+                      {signOutError && (
+                        <p role="alert" className="px-3 pb-2 text-[11.5px] text-[oklch(0.55_0.18_25)]">
+                          {signOutError}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -407,13 +426,19 @@ export function AppHeader({
                   <button
                     type="button"
                     onClick={handleSignOut}
-                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl text-[15px] font-medium text-foreground/90 hover:bg-card transition text-left"
+                    disabled={signingOut}
+                    className="flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl text-[15px] font-medium text-foreground/90 hover:bg-card transition text-left disabled:cursor-wait disabled:opacity-50"
                   >
                     <span className="grid place-items-center size-9 rounded-xl bg-card border border-foreground/5 text-foreground/70">
                       <LogOut className="size-[17px]" />
                     </span>
-                    Sign out
+                    {signingOut ? "Signing out…" : "Sign out"}
                   </button>
+                  {signOutError && (
+                    <p role="alert" className="px-4 pb-2 text-[12px] text-[oklch(0.55_0.18_25)]">
+                      {signOutError}
+                    </p>
+                  )}
                 </li>
               )}
             </ul>
