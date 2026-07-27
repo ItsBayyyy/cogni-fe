@@ -9,6 +9,7 @@ import { WaveVisualizer } from "@/components/wave-visualizer"
 import { ControlPanel } from "@/components/control-panel"
 import { AuthGuard } from "@/components/auth-guard"
 import { speakText, streamMessage, transcribeAudio } from "@/lib/api"
+import { normalizeAssistantSpeech } from "@/lib/speech-text"
 import { useMicAmplitude } from "@/hooks/use-mic-amplitude"
 
 type OrbState = "idle" | "listening" | "speaking"
@@ -258,6 +259,7 @@ function SessionInner() {
         setPhase("idle")
         return
       }
+      const reply = normalizeAssistantSpeech(full)
 
       // Request TTS for the full reply (separate AC so an interrupt can
       // kill the MP3 download independently of the chat stream).
@@ -265,11 +267,11 @@ function SessionInner() {
       speakAbortRef.current = speakAc
       let audioBlob: Blob
       try {
-        audioBlob = await speakText(full, speakAc.signal)
+        audioBlob = await speakText(reply, speakAc.signal)
       } catch {
         if (isStale()) return
         // Voice failed — fall back to revealing the text instantly so the user still sees the reply
-        setAiText(full)
+        setAiText(reply)
         setError("Voice synthesis failed. The text response is still available.")
         setPhase("idle")
         return
@@ -283,13 +285,13 @@ function SessionInner() {
 
       const audioEl = audioElRef.current
       if (!audioEl) {
-        setAiText(full)
+        setAiText(reply)
         setPhase("idle")
         return
       }
 
       // Tokenize once for word-by-word reveal
-      const words = full.split(/(\s+)/) // keep whitespace tokens to preserve spacing
+      const words = reply.split(/(\s+)/) // keep whitespace tokens to preserve spacing
       const wordCount = words.filter((w) => w.trim().length > 0).length
 
       const stopReveal = () => {
@@ -329,13 +331,13 @@ function SessionInner() {
         stopReveal()
         if (isStale()) return
         // Make sure the full text is shown even if reveal lagged
-        setAiText(full)
+        setAiText(reply)
         setPhase("idle")
       }
       audioEl.onerror = () => {
         stopReveal()
         if (isStale()) return
-        setAiText(full)
+        setAiText(reply)
         setPhase("idle")
       }
 
@@ -346,7 +348,7 @@ function SessionInner() {
         if (isStale()) return
         // Autoplay blocked — show the text immediately so the user still gets the reply
         stopReveal()
-        setAiText(full)
+        setAiText(reply)
         setPhase("idle")
       }
     } catch (e) {
