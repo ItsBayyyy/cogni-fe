@@ -9,7 +9,7 @@ export const API_BASE_URL = "/api/backend"
 
 // ---------- Types ----------
 
-export type BackendPersona = "friendly" | "strict" | "socratic"
+export type BackendPersona = "friendly" | "strict" | "socratic" | "comedian" | "nain"
 
 export interface SessionStartResponse {
   session_id: string
@@ -59,7 +59,15 @@ export interface EvaluateResponse {
 // ---------- Persona helper ----------
 
 export function toBackendPersona(p: string | null | undefined): BackendPersona {
-  if (p === "friendly" || p === "strict" || p === "socratic") return p
+  if (
+    p === "friendly" ||
+    p === "strict" ||
+    p === "socratic" ||
+    p === "comedian" ||
+    p === "nain"
+  ) {
+    return p
+  }
   return "friendly"
 }
 

@@ -10,21 +10,21 @@ import {
   HeartHandshake,
   GraduationCap,
   Brain,
+  Laugh,
+  Megaphone,
   Mic,
 } from "lucide-react"
 import { PhoneShell } from "@/components/phone-shell"
 import { AppHeader } from "@/components/app-header"
 import { AuthGuard } from "@/components/auth-guard"
 import { VoiceOrb } from "@/components/voice-orb"
-import { listSessions, type SessionListItem } from "@/lib/api"
+import { listSessions, type BackendPersona, type SessionListItem } from "@/lib/api"
 
 /**
- * Persona → icon + tone color. The list page only sees the *backend* persona id
- * because flavor personas (Comedian, NAIN) ride on top of the three real ones,
- * so we map each backend id to a friendly label and a tinted dot.
+ * Server-owned persona IDs map to their report presentation.
  */
 const PERSONA_META: Record<
-  string,
+  BackendPersona,
   { label: string; Icon: typeof HeartHandshake; tone: string }
 > = {
   friendly: {
@@ -41,6 +41,16 @@ const PERSONA_META: Record<
     label: "Socratic",
     Icon: Brain,
     tone: "oklch(0.7 0.18 280)",
+  },
+  comedian: {
+    label: "Comedian",
+    Icon: Laugh,
+    tone: "oklch(0.76 0.17 70)",
+  },
+  nain: {
+    label: "NAIN",
+    Icon: Megaphone,
+    tone: "oklch(0.67 0.2 25)",
   },
 }
 

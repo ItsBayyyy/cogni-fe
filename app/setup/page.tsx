@@ -16,53 +16,36 @@ import { AuthGuard } from "@/components/auth-guard"
 import { startSession } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
-/**
- * UI-level personas. The backend only knows three — `friendly`, `strict`,
- * `socratic` — so any new "flavor" persona declares the closest backend
- * persona it should ride on (`backend`) plus an optional `styleHint` that
- * gets appended to the topic. The LLM picks the styleHint up as part of
- * the conversation context and adopts the requested mannerism (laughter,
- * shouted "NAINNNNN", etc.) without us having to extend the API.
- */
 const PERSONAS = [
   {
     id: "friendly",
-    backend: "friendly",
     name: "The Friend",
     blurb: "Warm, encouraging, easy to open up to.",
     Icon: HeartHandshake,
   },
   {
     id: "strict",
-    backend: "strict",
     name: "The Strict",
     blurb: "Demanding, no-nonsense, raises the bar.",
     Icon: GraduationCap,
   },
   {
     id: "socratic",
-    backend: "socratic",
     name: "The Socratic",
     blurb: "Probing, curious, answers with questions.",
     Icon: Brain,
   },
   {
     id: "comedian",
-    backend: "friendly",
     name: "The Comedian",
     blurb: "Cracks jokes, laughs at their own punchlines, keeps it light.",
     Icon: Laugh,
-    styleHint:
-      "Style: speak like a stand-up comedian. Sprinkle natural laughter into your replies — write '*laughs*', 'haha', or 'hahaha' wherever a real comedian would chuckle. Stay funny but still useful.",
   },
   {
     id: "nain",
-    backend: "strict",
     name: "The NAIN",
     blurb: "Refuses dramatically. Will absolutely scream NAINNNNN at you.",
     Icon: Megaphone,
-    styleHint:
-      "Style: you are a theatrically dramatic refuser. Whenever you disagree, push back, or hit something you dislike, exclaim 'NAINNNNN' (in all caps, drawn out exactly like that) before continuing. Use it sparingly enough that it still lands — never more than once per reply — and follow it with an actual answer.",
   },
 ] as const
 
@@ -75,7 +58,7 @@ function SetupInner() {
   // retyping. We read it once on mount as the initial state — the input is
   // free to edit afterwards.
   const searchParams = useSearchParams()
-  const initialTopic = (searchParams.get("topic") || "").slice(0, 500)
+  const initialTopic = (searchParams.get("topic") || "").slice(0, 300)
   const [topic, setTopic] = useState(initialTopic)
   const [persona, setPersona] = useState<PersonaId>("friendly")
   const [submitting, setSubmitting] = useState(false)
@@ -88,22 +71,12 @@ function SetupInner() {
     setError(null)
     setSubmitting(true)
     try {
-      const chosen = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
-      // Flavor personas (Comedian, NAIN, …) ride on the closest backend persona
-      // and get their style instruction appended to the topic so the LLM picks
-      // up the mannerism without any backend change.
       const cleanTopic = topic.trim()
-      const sentTopic =
-        "styleHint" in chosen && chosen.styleHint
-          ? `${cleanTopic}\n\n${chosen.styleHint}`
-          : cleanTopic
-
-      const session = await startSession(sentTopic, chosen.backend)
+      const session = await startSession(cleanTopic, persona)
       const params = new URLSearchParams({
         session_id: session.session_id,
-        // Show the original topic in the UI — the styleHint is for the LLM only.
         topic: cleanTopic,
-        persona, // keep the UI persona id so the session page can label it correctly
+        persona,
       })
       router.push(`/session?${params.toString()}`)
     } catch {
@@ -135,12 +108,13 @@ function SetupInner() {
                 id="topic"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
+                maxLength={300}
                 placeholder="e.g. Explain consciousness from a biological perspective…"
                 rows={6}
                 className="w-full resize-none rounded-3xl bg-card/80 backdrop-blur-md border border-white/60 px-5 py-4 text-[16px] leading-relaxed tracking-tight text-foreground placeholder:text-muted-foreground/70 shadow-[0_8px_24px_-16px_oklch(0.5_0.05_330/0.3)] focus:outline-none focus:ring-2 focus:ring-foreground/10 focus:border-white/80"
               />
               <div className="absolute bottom-3 right-4 text-[11.5px] text-muted-foreground tabular-nums">
-                {topic.length} / 500
+                {topic.length} / 300
               </div>
             </div>
 
