@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 
 interface ControlPanelProps {
   muted?: boolean
+  micDisabled?: boolean
   /** Desktop tap-to-toggle handler */
   onToggleMute?: () => void
   /** Mobile push-to-talk: fires when user begins holding the mic button */
@@ -20,6 +21,7 @@ interface ControlPanelProps {
 
 export function ControlPanel({
   muted,
+  micDisabled = false,
   onToggleMute,
   onPressStart,
   onPressEnd,
@@ -31,6 +33,7 @@ export function ControlPanel({
     ? {
         onPointerDown: (e) => {
           e.preventDefault()
+          if (micDisabled) return
           ;(e.currentTarget as HTMLButtonElement).setPointerCapture?.(e.pointerId)
           onPressStart?.()
         },
@@ -44,10 +47,14 @@ export function ControlPanel({
         onContextMenu: (e) => e.preventDefault(),
       }
     : {
-        onClick: onToggleMute,
+        onClick: () => {
+          if (!micDisabled) onToggleMute?.()
+        },
       }
 
-  const mobileLabel = pushToTalk
+  const mobileLabel = micDisabled
+    ? "Please wait"
+    : pushToTalk
     ? muted
       ? "Hold to talk"
       : "You're speaking…"
@@ -76,11 +83,14 @@ export function ControlPanel({
             type="button"
             aria-label={pushToTalk ? "Hold to talk" : muted ? "Unmute" : "Mute"}
             aria-pressed={!muted}
+            aria-disabled={micDisabled}
+            disabled={micDisabled}
             {...mobileMicHandlers}
             className={cn(
               "relative grid place-items-center size-[72px] sm:size-[76px] rounded-full bg-foreground text-background shadow-[0_14px_30px_-10px_oklch(0.2_0.02_60/0.55)] transition select-none touch-none",
               muted ? "scale-100" : "scale-[1.06]",
               pushToTalk ? "active:scale-[0.97]" : "active:scale-95",
+              micDisabled && "cursor-not-allowed opacity-45 active:scale-100",
             )}
             style={{ WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
           >
@@ -117,9 +127,12 @@ export function ControlPanel({
           onClick={onToggleMute}
           aria-label={muted ? "Unmute" : "Mute"}
           aria-pressed={muted}
+          aria-disabled={micDisabled}
+          disabled={micDisabled}
           className={cn(
             "inline-flex items-center gap-2.5 h-14 px-7 rounded-full font-medium tracking-tight transition shadow-[0_14px_30px_-10px_oklch(0.2_0.02_60/0.55)] active:scale-[0.99]",
             muted ? "bg-foreground/80 text-background" : "bg-foreground text-background",
+            micDisabled && "cursor-not-allowed opacity-45 active:scale-100",
           )}
         >
           {muted ? <MicOff className="size-[18px]" /> : <Mic className="size-[18px]" />}

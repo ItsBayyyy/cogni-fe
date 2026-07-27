@@ -23,6 +23,11 @@ function SessionInner() {
   const persona = params.get("persona") || "analyst"
 
   const [phase, setPhase] = useState<Phase>("idle")
+  const phaseRef = useRef<Phase>("idle")
+  const setSessionPhase = useCallback((nextPhase: Phase) => {
+    phaseRef.current = nextPhase
+    setPhase(nextPhase)
+  }, [])
   const [muted, setMuted] = useState(true)
   const [userText, setUserText] = useState("")
   const [aiText, setAiText] = useState("")
@@ -142,7 +147,7 @@ function SessionInner() {
   // ----- Recording -----
   const startRecording = useCallback(async () => {
     // Don't start if we're not idle, or if a start is already in flight.
-    if (phase !== "idle" || startAborterRef.current) return
+    if (phaseRef.current !== "idle" || startAborterRef.current) return
 
     const aborter = { aborted: false }
     startAborterRef.current = aborter
@@ -178,7 +183,7 @@ function SessionInner() {
       }
 
       recorder.start()
-      setPhase("recording")
+      setSessionPhase("recording")
       setUserText("")
       setAiText("")
 
@@ -190,7 +195,7 @@ function SessionInner() {
     } catch {
       setError("Could not access the microphone. Check your browser permission.")
       setMuted(true)
-      setPhase("idle")
+      setSessionPhase("idle")
     } finally {
       // Only clear if this is still the active aborter.
       if (startAborterRef.current === aborter) {
@@ -199,12 +204,12 @@ function SessionInner() {
     }
     // stopRecordingAndProcess is stable enough; including it would create a cycle
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase])
+  }, [setSessionPhase])
 
   const stopRecordingAndProcess = useCallback(async () => {
     const recorder = recorderRef.current
     if (!recorder || recorder.state === "inactive") {
-      setPhase("idle")
+      setSessionPhase("idle")
       return
     }
 
@@ -229,7 +234,7 @@ function SessionInner() {
 
     if (blob.size < 1000) {
       // Too short / silent — skip
-      setPhase("idle")
+      setSessionPhase("idle")
       return
     }
 
@@ -238,17 +243,17 @@ function SessionInner() {
     const isStale = () => myGen !== genIdRef.current
 
     try {
-      setPhase("transcribing")
-      const text = await transcribeAudio(blob)
+      setSessionPhase("transcribing")
+      const text = await transcribeAudio(blob, sessionId)
       if (isStale()) return
       if (!text || !text.trim()) {
-        setPhase("idle")
+        setSessionPhase("idle")
         return
       }
       setUserText(text)
 
       // Stream the assistant response into a buffer (don't reveal yet — wait for audio)
-      setPhase("thinking")
+      setSessionPhase("thinking")
       setAiText("")
       const ac = new AbortController()
       abortRef.current = ac
@@ -256,7 +261,7 @@ function SessionInner() {
       if (isStale()) return
 
       if (!full || !full.trim()) {
-        setPhase("idle")
+        setSessionPhase("idle")
         return
       }
       const reply = normalizeAssistantSpeech(full)
@@ -273,7 +278,7 @@ function SessionInner() {
         // Voice failed — fall back to revealing the text instantly so the user still sees the reply
         setAiText(reply)
         setError("Voice synthesis failed. The text response is still available.")
-        setPhase("idle")
+        setSessionPhase("idle")
         return
       }
       if (isStale()) return
@@ -286,7 +291,7 @@ function SessionInner() {
       const audioEl = audioElRef.current
       if (!audioEl) {
         setAiText(reply)
-        setPhase("idle")
+        setSessionPhase("idle")
         return
       }
 
@@ -332,16 +337,16 @@ function SessionInner() {
         if (isStale()) return
         // Make sure the full text is shown even if reveal lagged
         setAiText(reply)
-        setPhase("idle")
+        setSessionPhase("idle")
       }
       audioEl.onerror = () => {
         stopReveal()
         if (isStale()) return
         setAiText(reply)
-        setPhase("idle")
+        setSessionPhase("idle")
       }
 
-      setPhase("speaking")
+      setSessionPhase("speaking")
       try {
         await audioEl.play()
       } catch {
@@ -349,34 +354,27 @@ function SessionInner() {
         // Autoplay blocked — show the text immediately so the user still gets the reply
         stopReveal()
         setAiText(reply)
-        setPhase("idle")
+        setSessionPhase("idle")
       }
     } catch (e) {
       // Aborts during interrupt are expected — stay silent.
       if (e instanceof DOMException && e.name === "AbortError") return
       if (isStale()) return
       setError("Something went wrong. Please try again.")
-      setPhase("idle")
+      setSessionPhase("idle")
     }
-  }, [sessionId])
+  }, [sessionId, setSessionPhase])
 
   // ----- Press / toggle handlers -----
   // These call start/stop directly so there's no race between `muted` state
   // updates and async getUserMedia setup.
   const handlePressStart = useCallback(() => {
     if (pressedRef.current) return
-    // Allow interrupting while CogniFlip is thinking or speaking — hard-stop first.
-    if (phase === "thinking" || phase === "speaking") {
-      hardStopPlayback()
-      setAiText("")
-      setPhase("idle")
-    } else if (phase !== "idle") {
-      return
-    }
+    if (phaseRef.current !== "idle") return
     pressedRef.current = true
     setMuted(false)
     void startRecording()
-  }, [phase, startRecording, hardStopPlayback])
+  }, [startRecording])
 
   const handlePressEnd = useCallback(() => {
     if (!pressedRef.current) return
@@ -395,26 +393,17 @@ function SessionInner() {
   }, [stopRecordingAndProcess])
 
   const handleDesktopToggle = useCallback(() => {
-    if (phase === "thinking" || phase === "speaking") {
-      // Interrupt CogniFlip and start a new recording immediately.
-      hardStopPlayback()
-      setAiText("")
-      setPhase("idle")
+    const currentPhase = phaseRef.current
+    if (currentPhase === "idle" && muted) {
       pressedRef.current = true
       setMuted(false)
       void startRecording()
-      return
-    }
-    if (phase === "idle" && muted) {
-      pressedRef.current = true
-      setMuted(false)
-      void startRecording()
-    } else if (phase === "recording" && !muted) {
+    } else if (currentPhase === "recording" && !muted) {
       pressedRef.current = false
       setMuted(true)
       void stopRecordingAndProcess()
     }
-  }, [phase, muted, startRecording, stopRecordingAndProcess, hardStopPlayback])
+  }, [muted, startRecording, stopRecordingAndProcess])
 
   // On mobile, default to muted; on desktop, default to muted too (mic permission gate)
   useEffect(() => {
@@ -512,6 +501,8 @@ function SessionInner() {
   }, [phase])
 
   const orbAmplitude = phase === "recording" ? micAmplitude : synthPulse
+  const micDisabled =
+    phase === "transcribing" || phase === "thinking" || phase === "speaking"
 
   const headerSubtitle =
     phase === "recording"
@@ -599,6 +590,7 @@ function SessionInner() {
         <div className="pb-8 sm:pb-12">
           <ControlPanel
             muted={muted}
+            micDisabled={micDisabled}
             pushToTalk
             onPressStart={handlePressStart}
             onPressEnd={handlePressEnd}
@@ -705,6 +697,7 @@ function SessionInner() {
 
           <ControlPanel
             muted={muted}
+            micDisabled={micDisabled}
             onToggleMute={handleDesktopToggle}
             onClose={handleEnd}
             onPersona={() => router.push("/setup")}

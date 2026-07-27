@@ -218,7 +218,7 @@ export async function evaluateSession(sessionId: string): Promise<EvaluateRespon
 
 // ---------- Voice ----------
 
-export async function transcribeAudio(blob: Blob): Promise<string> {
+export async function transcribeAudio(blob: Blob, sessionId: string): Promise<string> {
   const headers = authHeaders() // no Content-Type — let browser set boundary
   const form = new FormData()
   // Use a sensible filename + extension based on the blob mime
@@ -230,6 +230,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
         ? "ogg"
         : "wav"
   form.append("file", blob, `recording.${ext}`)
+  form.append("session_id", sessionId)
 
   const res = await fetch(`${API_BASE_URL}/voice/transcribe`, {
     method: "POST",
