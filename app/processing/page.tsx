@@ -6,7 +6,7 @@ import { PhoneShell } from "@/components/phone-shell"
 import { AppHeader } from "@/components/app-header"
 import { VoiceOrb } from "@/components/voice-orb"
 import { AuthGuard } from "@/components/auth-guard"
-import { evaluateSession } from "@/lib/api"
+import { evaluateSession, hasApiErrorCode } from "@/lib/api"
 import { cacheEvaluation } from "@/lib/evaluation-cache"
 
 const STEPS = [
@@ -23,7 +23,7 @@ function ProcessingInner() {
   const [step, setStep] = useState(0)
   const [orbSize, setOrbSize] = useState(260)
   const [mounted, setMounted] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<"insufficient" | "generic" | null>(null)
   const startedRef = useRef(false)
 
   useEffect(() => {
@@ -68,15 +68,23 @@ function ProcessingInner() {
         const qs = new URLSearchParams(params.toString())
         window.setTimeout(() => router.push(`/result?${qs.toString()}`), 500)
       })
-      .catch(() => {
+      .catch((evaluationError: unknown) => {
         window.clearInterval(stepTimer)
-        setError("Could not evaluate this session. Please try again.")
+        setError(
+          hasApiErrorCode(evaluationError, "INSUFFICIENT_MESSAGES")
+            ? "insufficient"
+            : "generic",
+        )
       })
 
     return () => window.clearInterval(stepTimer)
   }, [sessionId, router, params])
 
-  const isInsufficient = error?.toLowerCase().includes("insufficient")
+  const isInsufficient = error === "insufficient"
+  const returnToSession = () => {
+    const qs = new URLSearchParams(params.toString())
+    router.push(`/session?${qs.toString()}`)
+  }
 
   return (
     <PhoneShell size="wide">
@@ -96,19 +104,19 @@ function ProcessingInner() {
                   <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-foreground/60"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
                 </div>
                 <h2 className="text-[28px] sm:text-[32px] font-semibold tracking-tight text-balance">
-                  Let&apos;s chat a little more
+                  Nothing to evaluate yet
                 </h2>
                 <p className="text-[14.5px] text-muted-foreground leading-relaxed text-pretty">
-                  CogniFlip needs at least a few exchanges to build a meaningful report.
-                  Go back and have a short conversation — even 2–3 turns is enough!
+                  Say something to CogniFlip and wait for its reply before ending the session.
+                  One completed exchange is enough to create a report.
                 </p>
               </div>
 
               <button
-                onClick={() => router.push("/setup")}
+                onClick={returnToSession}
                 className="w-full rounded-2xl bg-foreground text-background py-3.5 text-[14px] font-medium hover:opacity-90 transition-opacity"
               >
-                Start a new session
+                Return to session
               </button>
             </div>
           ) : (

@@ -519,6 +519,13 @@ function SessionInner() {
 
   // ----- End session -----
   const handleEnd = () => {
+    if (!userText.trim()) {
+      setError(
+        "Nothing to evaluate yet. Say something to CogniFlip and wait for its reply before ending the session.",
+      )
+      return
+    }
+
     hardStopPlayback()
     try {
       recorderRef.current?.stop()

@@ -73,13 +73,22 @@ export function toBackendPersona(p: string | null | undefined): BackendPersona {
 
 // ---------- Internals ----------
 
+export type ApiErrorCode = "INSUFFICIENT_MESSAGES"
+
 class ApiError extends Error {
   status: number
-  constructor(message: string, status: number) {
+  code?: ApiErrorCode
+
+  constructor(message: string, status: number, code?: ApiErrorCode) {
     super(message)
     this.status = status
+    this.code = code
     this.name = "ApiError"
   }
+}
+
+export function hasApiErrorCode(error: unknown, code: ApiErrorCode): boolean {
+  return error instanceof ApiError && error.code === code
 }
 
 function authHeaders(extra: Record<string, string> = {}): HeadersInit {
@@ -97,6 +106,20 @@ function safeErrorMessage(status: number): string {
   return "The service is temporarily unavailable. Please try again."
 }
 
+async function safeErrorCode(res: Response): Promise<ApiErrorCode | undefined> {
+  if (!(res.headers.get("content-type") || "").includes("application/json")) return undefined
+
+  try {
+    const body = (await res.json()) as {
+      detail?: { code?: unknown }
+    }
+    const code = body.detail?.code
+    return code === "INSUFFICIENT_MESSAGES" ? code : undefined
+  } catch {
+    return undefined
+  }
+}
+
 async function request<T>(
   path: string,
   init: RequestInit & { json?: unknown } = {},
@@ -112,7 +135,11 @@ async function request<T>(
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   })
   if (!res.ok) {
-    throw new ApiError(safeErrorMessage(res.status), res.status)
+    throw new ApiError(
+      safeErrorMessage(res.status),
+      res.status,
+      await safeErrorCode(res),
+    )
   }
   // Some endpoints may return empty responses
   const ct = res.headers.get("content-type") || ""
