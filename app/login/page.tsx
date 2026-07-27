@@ -11,7 +11,14 @@ import { signIn, signInDemo, signUp, verifyOtp, resendOtp, requestPasswordReset,
 import { cn } from "@/lib/utils"
 import { BrandLogo } from "@/components/brand-logo"
 
-type Mode = "signin" | "signup" | "verify" | "forgot" | "reset_otp" | "reset_password"
+type Mode =
+  | "signin"
+  | "signup"
+  | "signup_result"
+  | "verify"
+  | "forgot"
+  | "reset_otp"
+  | "reset_password"
 
 const ONBOARDING_STORAGE_PREFIX = "cogniflip_onboarding_v1"
 
@@ -132,11 +139,11 @@ function LoginInner() {
             setError(result.error)
             return
         }
-        // Switch to OTP verify mode
-        setMode("verify")
+        // Do not reveal whether the address already belongs to a verified
+        // account. Let the user choose verification or sign-in explicitly.
+        setMode("signup_result")
         setCooldown(60)
-        savePendingVerify(email.trim(), "verify")
-        setSuccessMsg("We sent a 6-digit code to your email.")
+        setSuccessMsg(null)
     } else if (mode === "verify") {
         const result = await verifyOtp(email.trim(), otp.trim())
         setSubmitting(false)
@@ -264,6 +271,8 @@ function LoginInner() {
                   ? "Welcome back"
                   : mode === "signup"
                   ? "Create your account"
+                  : mode === "signup_result"
+                  ? "Check your inbox"
                   : mode === "verify" || mode === "reset_otp"
                   ? "Check your email"
                   : mode === "forgot"
@@ -275,6 +284,8 @@ function LoginInner() {
                   ? "Sign in to start a new session or revisit a report."
                   : mode === "signup"
                   ? "It only takes a moment. No credit card, no setup."
+                  : mode === "signup_result"
+                  ? "Continue with verification, or sign in if you already have an account."
                   : mode === "verify"
                   ? "We've sent a 6-digit verification code to your email."
                   : mode === "forgot"
@@ -286,7 +297,7 @@ function LoginInner() {
             </div>
 
             <div className="rounded-3xl bg-card/85 backdrop-blur-xl border border-white/60 shadow-[0_20px_60px_-24px_oklch(0.5_0.05_330/0.45)] p-5 sm:p-7">
-              {(mode === "signin" || mode === "signup") && (
+              {(mode === "signin" || mode === "signup" || mode === "signup_result") && (
                   <div className="grid grid-cols-2 gap-1 p-1 rounded-full bg-foreground/5 mb-6">
                     <button
                       type="button"
@@ -314,7 +325,7 @@ function LoginInner() {
                       }}
                       className={cn(
                         "h-10 rounded-full text-[13.5px] font-medium tracking-tight transition",
-                        mode === "signup"
+                        mode === "signup" || mode === "signup_result"
                           ? "bg-background text-foreground shadow-[0_4px_12px_-6px_oklch(0.2_0.02_60/0.25)]"
                           : "text-muted-foreground hover:text-foreground/80",
                       )}
@@ -331,6 +342,8 @@ function LoginInner() {
                     ? "Sign in"
                     : mode === "signup"
                     ? "Create your account"
+                    : mode === "signup_result"
+                    ? "Check your inbox"
                     : mode === "verify" || mode === "reset_otp"
                     ? "Check your email"
                     : mode === "forgot"
@@ -342,6 +355,8 @@ function LoginInner() {
                     ? "Use your email and password to continue."
                     : mode === "signup"
                     ? "Just a name, an email, and a password."
+                    : mode === "signup_result"
+                    ? "For your privacy, we don't reveal whether an account already exists."
                     : mode === "verify"
                     ? "Enter the 6-digit code we sent you."
                     : mode === "forgot"
@@ -353,6 +368,21 @@ function LoginInner() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-3.5">
+                {mode === "signup_result" && (
+                  <div
+                    role="status"
+                    className="rounded-2xl border border-foreground/10 bg-foreground/[0.035] p-4 space-y-2"
+                  >
+                    <p className="text-[14px] font-medium tracking-tight text-foreground">
+                      Check your email
+                    </p>
+                    <p className="text-[13px] leading-relaxed text-muted-foreground">
+                      If this email needs verification, we sent a 6-digit code. If you already
+                      have an account, sign in with your existing password instead.
+                    </p>
+                  </div>
+                )}
+
                 {mode === "signup" && (
                   <Field
                     id="name"
@@ -515,52 +545,83 @@ function LoginInner() {
                 )}
 
                 <div className="pt-2 flex flex-col gap-3">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className={cn(
-                      "w-full h-13 sm:h-14 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
-                      "shadow-[0_14px_30px_-12px_oklch(0.2_0.02_60/0.5)]",
-                      submitting
-                        ? "bg-foreground/40 text-background/80 cursor-not-allowed"
-                        : "bg-foreground text-background active:scale-[0.99] hover:bg-foreground/90",
-                    )}
-                  >
-                    {submitting ? (
-                      <span className="flex items-center gap-2">
-                        <span
-                          className="size-4 rounded-full border-2 border-background/30 border-t-background animate-spin"
-                          aria-hidden
-                        />
-                        {mode === "signin"
-                          ? "Signing in…"
-                          : mode === "signup"
-                          ? "Creating account…"
-                          : mode === "verify"
-                          ? "Verifying…"
-                          : mode === "forgot"
-                          ? "Sending reset code…"
-                          : mode === "reset_otp"
-                          ? "Verifying reset code…"
-                          : "Resetting password…"}
-                      </span>
-                    ) : (
-                      <>
-                        {mode === "signin"
-                          ? "Sign in"
-                          : mode === "signup"
-                          ? "Create account"
-                          : mode === "verify"
-                          ? "Verify Code"
-                          : mode === "forgot"
-                          ? "Send Reset Code"
-                          : mode === "reset_otp"
-                          ? "Verify Reset Code"
-                          : "Reset Password"}
+                  {mode === "signup_result" ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMode("verify")
+                          setError(null)
+                          setSuccessMsg("Enter the 6-digit code from your email.")
+                          savePendingVerify(email.trim(), "verify")
+                        }}
+                        className="w-full h-13 sm:h-14 rounded-full bg-foreground text-background font-medium tracking-tight transition flex items-center justify-center gap-2 shadow-[0_14px_30px_-12px_oklch(0.2_0.02_60/0.5)] active:scale-[0.99] hover:bg-foreground/90"
+                      >
+                        Enter verification code
                         <ArrowRight className="size-4" />
-                      </>
-                    )}
-                  </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          clearPendingVerify()
+                          setMode("signin")
+                          setPassword("")
+                          setError(null)
+                          setSuccessMsg("Sign in with your existing account.")
+                        }}
+                        className="w-full h-11 sm:h-12 rounded-full border border-foreground/15 text-foreground font-medium tracking-tight hover:bg-foreground/5 transition"
+                      >
+                        Sign in instead
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className={cn(
+                        "w-full h-13 sm:h-14 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
+                        "shadow-[0_14px_30px_-12px_oklch(0.2_0.02_60/0.5)]",
+                        submitting
+                          ? "bg-foreground/40 text-background/80 cursor-not-allowed"
+                          : "bg-foreground text-background active:scale-[0.99] hover:bg-foreground/90",
+                      )}
+                    >
+                      {submitting ? (
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="size-4 rounded-full border-2 border-background/30 border-t-background animate-spin"
+                            aria-hidden
+                          />
+                          {mode === "signin"
+                            ? "Signing in…"
+                            : mode === "signup"
+                            ? "Creating account…"
+                            : mode === "verify"
+                            ? "Verifying…"
+                            : mode === "forgot"
+                            ? "Sending reset code…"
+                            : mode === "reset_otp"
+                            ? "Verifying reset code…"
+                            : "Resetting password…"}
+                        </span>
+                      ) : (
+                        <>
+                          {mode === "signin"
+                            ? "Sign in"
+                            : mode === "signup"
+                            ? "Create account"
+                            : mode === "verify"
+                            ? "Verify Code"
+                            : mode === "forgot"
+                            ? "Send Reset Code"
+                            : mode === "reset_otp"
+                            ? "Verify Reset Code"
+                            : "Reset Password"}
+                          <ArrowRight className="size-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {mode === "signin" && (
                     <>
@@ -651,6 +712,10 @@ function LoginInner() {
                       Sign in
                     </button>
                   </>
+                )}
+
+                {mode === "signup_result" && (
+                  <>Use one of the options above to continue.</>
                 )}
 
                 {mode === "forgot" && (
