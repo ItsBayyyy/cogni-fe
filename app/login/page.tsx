@@ -7,7 +7,7 @@ import { ArrowRight, Eye, EyeOff, Mail, Lock, User, ShieldCheck } from "lucide-r
 import { PhoneShell } from "@/components/phone-shell"
 import { VoiceOrb } from "@/components/voice-orb"
 import { useAuth } from "@/hooks/use-auth"
-import { signIn, signUp, verifyOtp, resendOtp, requestPasswordReset, verifyResetPasswordCode, confirmPasswordReset } from "@/lib/auth"
+import { signIn, signInDemo, signUp, verifyOtp, resendOtp, requestPasswordReset, verifyResetPasswordCode, confirmPasswordReset } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { BrandLogo } from "@/components/brand-logo"
 
@@ -210,6 +210,20 @@ function LoginInner() {
               setCooldown(parseInt(match[1], 10))
           }
       }
+  }
+
+  const handleDemoLogin = async () => {
+    if (submitting) return
+    setError(null)
+    setSuccessMsg(null)
+    setSubmitting(true)
+    const result = await signInDemo()
+    setSubmitting(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
+    }
+    router.replace(resolvePostAuthHref(next, result.user.id))
   }
 
   return (
@@ -547,6 +561,33 @@ function LoginInner() {
                       </>
                     )}
                   </button>
+
+                  {mode === "signin" && (
+                    <>
+                      <div className="flex items-center gap-3" aria-hidden>
+                        <span className="h-px flex-1 bg-foreground/10" />
+                        <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                          Jury access
+                        </span>
+                        <span className="h-px flex-1 bg-foreground/10" />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={submitting}
+                        onClick={handleDemoLogin}
+                        className={cn(
+                          "w-full h-11 sm:h-12 rounded-full font-medium tracking-tight transition",
+                          "border border-foreground/15 text-foreground hover:bg-foreground/5 active:scale-[0.99]",
+                          submitting && "opacity-50 cursor-not-allowed",
+                        )}
+                      >
+                        Continue as demo judge
+                      </button>
+                      <p className="text-center text-[11.5px] leading-relaxed text-muted-foreground">
+                        Creates a private temporary workspace. No password required.
+                      </p>
+                    </>
+                  )}
 
                   {(mode === "verify" || mode === "reset_otp") && (
                       <button

@@ -1,7 +1,7 @@
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
 
-const TOKEN_ENDPOINTS = new Set(["auth/login", "auth/verify-otp"])
+const TOKEN_ENDPOINTS = new Set(["auth/login", "auth/verify-otp", "auth/demo"])
 const SAFE_RESPONSE_HEADERS = new Set([
   "cache-control",
   "content-disposition",

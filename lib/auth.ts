@@ -226,3 +226,26 @@ export async function signOut() {
       notifyAuthChange()
   }
 }
+
+export async function signInDemo(): Promise<
+  { ok: true; user: AuthUser } | { ok: false; error: string }
+> {
+  try {
+    const res = await fetch(`${API_URL}/demo`, {
+      method: "POST",
+      credentials: "same-origin",
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: extractError(res, "Demo access is temporarily unavailable."),
+      }
+    }
+
+    notifyAuthChange()
+    return { ok: true, user: data.user }
+  } catch {
+    return { ok: false, error: "Network error" }
+  }
+}
