@@ -15,6 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { evaluateSession, getTranscript, type EvaluateResponse, type TranscriptResponse } from "@/lib/api"
+import { takeCachedEvaluation } from "@/lib/evaluation-cache"
 
 interface Metric {
   label: string
@@ -137,19 +138,10 @@ function ResultInner() {
       }
 
       try {
-        // Prepare promises for eval and transcript
-        let evalPromise: Promise<EvaluateResponse>
-
-        const cached = window.sessionStorage.getItem(`cogniflip_eval_${sessionId}`)
-        if (cached) {
-          try {
-            evalPromise = Promise.resolve(JSON.parse(cached) as EvaluateResponse)
-          } catch {
-            evalPromise = evaluateSession(sessionId)
-          }
-        } else {
-          evalPromise = evaluateSession(sessionId)
-        }
+        const cached = takeCachedEvaluation(sessionId)
+        const evalPromise = cached
+          ? Promise.resolve(cached)
+          : evaluateSession(sessionId)
 
         const [evalResult, transcriptResult] = await Promise.all([
           evalPromise,
@@ -160,21 +152,9 @@ function ResultInner() {
 
         setData(evalResult)
         setTranscript(transcriptResult)
-
-        // Cache the eval result if it wasn't already
-        if (!cached) {
-          try {
-            window.sessionStorage.setItem(
-              `cogniflip_eval_${sessionId}`,
-              JSON.stringify(evalResult),
-            )
-          } catch {
-            /* ignore */
-          }
-        }
-      } catch (e) {
+      } catch {
         if (!active) return
-        setError(e instanceof Error ? e.message : "Could not load report.")
+        setError("Could not load the report. Please try again.")
       } finally {
         if (active) setLoading(false)
       }

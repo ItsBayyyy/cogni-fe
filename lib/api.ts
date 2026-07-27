@@ -1,14 +1,11 @@
 "use client"
 
-import { getAccessToken } from "@/lib/auth"
-
 /**
  * API client for the CogniFlip backend.
- * Base URL is configurable via NEXT_PUBLIC_API_BASE_URL,
- * defaulting to http://localhost:8000/api/v1 for local dev.
+ * Requests stay same-origin and are relayed by the Next.js BFF. The BFF keeps
+ * the backend JWT in an HttpOnly cookie, so browser JavaScript never sees it.
  */
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://cogni-be-production.up.railway.app/api/v1"
+export const API_BASE_URL = "/api/backend"
 
 // ---------- Types ----------
 
@@ -77,15 +74,19 @@ class ApiError extends Error {
   }
 }
 
-async function authHeaders(extra: Record<string, string> = {}): Promise<HeadersInit> {
-  const token = await getAccessToken()
-  if (!token) {
-    throw new ApiError("Not authenticated", 401)
-  }
-  return {
-    Authorization: `Bearer ${token}`,
-    ...extra,
-  }
+function authHeaders(extra: Record<string, string> = {}): HeadersInit {
+  return extra
+}
+
+function safeErrorMessage(status: number): string {
+  if (status === 400 || status === 422) return "The request is invalid. Please check your input."
+  if (status === 401) return "Your session has expired. Please sign in again."
+  if (status === 403) return "You do not have permission to perform this action."
+  if (status === 404) return "The requested resource was not found."
+  if (status === 413) return "The uploaded file is too large."
+  if (status === 415) return "This file type is not supported."
+  if (status === 429) return "Too many attempts. Please wait before trying again."
+  return "The service is temporarily unavailable. Please try again."
 }
 
 async function request<T>(
@@ -93,31 +94,17 @@ async function request<T>(
   init: RequestInit & { json?: unknown } = {},
 ): Promise<T> {
   const { json, headers, ...rest } = init
-  const baseHeaders = await authHeaders(
+  const baseHeaders = authHeaders(
     json ? { "Content-Type": "application/json" } : {},
   )
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
+    credentials: "same-origin",
     headers: { ...baseHeaders, ...(headers as Record<string, string>) },
     body: json !== undefined ? JSON.stringify(json) : rest.body,
   })
   if (!res.ok) {
-    let msg = `${res.status} ${res.statusText}`
-    try {
-      const data = await res.json()
-      if (data?.detail) {
-        if (typeof data.detail === "string") {
-          msg = data.detail
-        } else if (Array.isArray(data.detail)) {
-          msg = data.detail.map((d: Record<string, unknown>) => (d.msg || d.message || "") as string).filter(Boolean).join("; ") || "Validation error"
-        } else {
-          msg = "Request failed"
-        }
-      } else if (data?.message) msg = data.message
-    } catch {
-      /* ignore */
-    }
-    throw new ApiError(msg, res.status)
+    throw new ApiError(safeErrorMessage(res.status), res.status)
   }
   // Some endpoints may return empty responses
   const ct = res.headers.get("content-type") || ""
@@ -161,7 +148,7 @@ export async function streamMessage(
   onChunk?: (chunk: string) => void,
   signal?: AbortSignal,
 ): Promise<string> {
-  const headers = await authHeaders({
+  const headers = authHeaders({
     "Content-Type": "application/json",
     Accept: "text/event-stream",
   })
@@ -170,8 +157,9 @@ export async function streamMessage(
     `${API_BASE_URL}/sessions/${encodeURIComponent(sessionId)}/message`,
     {
       method: "POST",
+      credentials: "same-origin",
       headers,
-      body: JSON.stringify({ role: "user", content }),
+      body: JSON.stringify({ content }),
       signal,
     },
   )
@@ -231,7 +219,7 @@ export async function evaluateSession(sessionId: string): Promise<EvaluateRespon
 // ---------- Voice ----------
 
 export async function transcribeAudio(blob: Blob): Promise<string> {
-  const headers = await authHeaders() // no Content-Type — let browser set boundary
+  const headers = authHeaders() // no Content-Type — let browser set boundary
   const form = new FormData()
   // Use a sensible filename + extension based on the blob mime
   const ext = blob.type.includes("webm")
@@ -245,6 +233,7 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 
   const res = await fetch(`${API_BASE_URL}/voice/transcribe`, {
     method: "POST",
+    credentials: "same-origin",
     headers,
     body: form,
   })
@@ -256,9 +245,10 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
 }
 
 export async function speakText(text: string, signal?: AbortSignal): Promise<Blob> {
-  const headers = await authHeaders({ "Content-Type": "application/json" })
+  const headers = authHeaders({ "Content-Type": "application/json" })
   const res = await fetch(`${API_BASE_URL}/voice/speak`, {
     method: "POST",
+    credentials: "same-origin",
     headers,
     body: JSON.stringify({ text }),
     signal,

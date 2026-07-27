@@ -186,9 +186,8 @@ function SessionInner() {
       if (aborter.aborted) {
         void stopRecordingAndProcess()
       }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not access microphone."
-      setError(msg)
+    } catch {
+      setError("Could not access the microphone. Check your browser permission.")
       setMuted(true)
       setPhase("idle")
     } finally {
@@ -267,12 +266,11 @@ function SessionInner() {
       let audioBlob: Blob
       try {
         audioBlob = await speakText(full, speakAc.signal)
-      } catch (e) {
+      } catch {
         if (isStale()) return
         // Voice failed — fall back to revealing the text instantly so the user still sees the reply
         setAiText(full)
-        const msg = e instanceof Error ? e.message : "Voice synthesis failed."
-        setError(msg)
+        setError("Voice synthesis failed. The text response is still available.")
         setPhase("idle")
         return
       }
@@ -355,8 +353,7 @@ function SessionInner() {
       // Aborts during interrupt are expected — stay silent.
       if (e instanceof DOMException && e.name === "AbortError") return
       if (isStale()) return
-      const msg = e instanceof Error ? e.message : "Something went wrong."
-      setError(msg)
+      setError("Something went wrong. Please try again.")
       setPhase("idle")
     }
   }, [sessionId])

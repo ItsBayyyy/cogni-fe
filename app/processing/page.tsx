@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/app-header"
 import { VoiceOrb } from "@/components/voice-orb"
 import { AuthGuard } from "@/components/auth-guard"
 import { evaluateSession } from "@/lib/api"
+import { cacheEvaluation } from "@/lib/evaluation-cache"
 
 const STEPS = [
   "Transcribing your conversation",
@@ -63,21 +64,13 @@ function ProcessingInner() {
       .then(([result]) => {
         window.clearInterval(stepTimer)
         setStep(STEPS.length - 1)
-        try {
-          window.sessionStorage.setItem(
-            `cogniflip_eval_${sessionId}`,
-            JSON.stringify(result),
-          )
-        } catch {
-          /* ignore */
-        }
+        cacheEvaluation(sessionId, result)
         const qs = new URLSearchParams(params.toString())
         window.setTimeout(() => router.push(`/result?${qs.toString()}`), 500)
       })
-      .catch((e: unknown) => {
+      .catch(() => {
         window.clearInterval(stepTimer)
-        const msg = e instanceof Error ? e.message : "Could not evaluate this session."
-        setError(msg)
+        setError("Could not evaluate this session. Please try again.")
       })
 
     return () => window.clearInterval(stepTimer)

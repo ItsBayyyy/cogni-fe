@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { ArrowRight, Eye, EyeOff, Mail, Lock, Sparkles, User, ShieldCheck } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, Mail, Lock, User, ShieldCheck } from "lucide-react"
 import { PhoneShell } from "@/components/phone-shell"
 import { VoiceOrb } from "@/components/voice-orb"
 import { useAuth } from "@/hooks/use-auth"
@@ -210,12 +210,6 @@ function LoginInner() {
               setCooldown(parseInt(match[1], 10))
           }
       }
-  }
-
-  const handleDemoFill = () => {
-    setEmail("bayuardana213@gmail.com")
-    setPassword("Bayuardana213@gmail.com")
-    setError(null)
   }
 
   return (
@@ -554,20 +548,6 @@ function LoginInner() {
                     )}
                   </button>
 
-                  {mode === "signin" && (
-                    <button
-                      type="button"
-                      onClick={handleDemoFill}
-                      className={cn(
-                        "w-full h-11 sm:h-12 rounded-full font-medium tracking-tight transition flex items-center justify-center gap-2",
-                        "border border-foreground/10 text-foreground hover:bg-foreground/5 active:scale-[0.99]",
-                      )}
-                    >
-                      <Sparkles className="size-4 text-muted-foreground" />
-                      Isi dengan Akun Demo
-                    </button>
-                  )}
-                  
                   {(mode === "verify" || mode === "reset_otp") && (
                       <button
                         type="button"

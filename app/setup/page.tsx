@@ -106,9 +106,8 @@ function SetupInner() {
         persona, // keep the UI persona id so the session page can label it correctly
       })
       router.push(`/session?${params.toString()}`)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Could not start session."
-      setError(msg)
+    } catch {
+      setError("Could not start the session. Please try again.")
       setSubmitting(false)
     }
   }

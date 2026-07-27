@@ -1,6 +1,5 @@
 import Link from "next/link"
-import { ArrowRight, Sparkles } from "lucide-react"
-import Image from "next/image"
+import { ArrowRight } from "lucide-react"
 import { BrandLogo } from "../brand-logo"
 
 export function CtaFooterSection() {

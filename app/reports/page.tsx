@@ -83,9 +83,9 @@ function ReportsInner() {
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         )
         setItems(sorted)
-      } catch (e) {
+      } catch {
         if (!active) return
-        setError(e instanceof Error ? e.message : "Could not load your reports.")
+        setError("Could not load your reports. Please try again.")
       } finally {
         if (active) setLoading(false)
       }

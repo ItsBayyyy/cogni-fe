@@ -10,6 +10,7 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL || "http://localhost:3000"),
   title: "CogniFlip — AI voice assistant",
   description:
     "A premium AI voice assistant that listens, thinks, and replies — in real time.",
